@@ -77,7 +77,7 @@ func Run(cmd *exec.Cmd) (*RunResult, error) {
 
 	klog.V(1).Infof("Completed: %s (duration: %s, exit code: %d, err: %v)", cmd, rr.Duration, rr.ExitCode, err)
 	if len(rr.Stderr.Bytes()) > 0 {
-		klog.Warningf("stderr:\n%s\n", rr.Stderr.String())
+		klog.Warningf("%s", rr.Stderr.String())
 	}
 
 	if err == nil {
@@ -94,7 +94,7 @@ func runStep(s Step, d time.Duration) error {
 	cmd := ""
 	args := []string{}
 
-	klog.Infof("STEP: %+v", s)
+	klog.V(1).Infof("STEP: %+v", s)
 	switch {
 	case s.Local != "":
 		cmd = "sh"
@@ -125,7 +125,9 @@ func ensureRequirements(r Requirements, d time.Duration) error {
 	defer cancel()
 
 	// TODO: Add support for other environments
-	_, err := Run(exec.CommandContext(ctx, "minikube", "start", "--kubernetes-version", r.KubernetesVersion))
+	args := []string{"minikube", "start", "--kubernetes-version", r.KubernetesVersion}
+	klog.Infof("Setting up cluster: %v", args)
+	_, err := Run(exec.CommandContext(ctx, args[0], args[1:]...))
 	return err
 }
 
@@ -159,9 +161,10 @@ func main() {
 
 	backgrounded := 0
 	for i, step := range s.Setup {
+		klog.Infof("Running step %d of %d ...", i, len(s.Setup))
 		if step.Background {
 			go func() {
-				klog.Infof("Running in background: %+v", step)
+				klog.V(1).Infof("Running in background: %+v", step)
 				err := runStep(step, *timeoutFlag)
 				if err != nil {
 					klog.Errorf("background step %d failed: %v", i, err)
