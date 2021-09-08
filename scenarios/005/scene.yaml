@@ -1,0 +1,41 @@
+requirements:
+  kubernetes-version: v1.21.0
+
+setup:
+  ######################################
+  # Part 0: Launch innocuous "honk" pods
+  ######################################
+  - local: perl -e '@a = (1..12); for $i (@a){ $name="honk" x $i; system("sed s/X/$name/ < honk.yaml | kubectl apply -f -")}'
+
+  ###########################
+  # Part 1: Taint the workers
+  ###########################
+  # Make only the master schedulable (to block future deployments)
+  - local:
+      kubectl get node --selector='!node-role.kubernetes.io/master' --no-headers \
+      | awk '{ print $1 }' \
+      | xargs -I{} kubectl taint nodes {} locked=true:NoExecute
+
+  ####################
+  # Part 2: DNS games!
+  ####################
+  # Scale DNS down
+  - local: kubectl scale deployments.apps -n kube-system coredns --replicas=1
+  # Cause DNS loop
+  - local: kubectl apply -f coredns-loop-configmap.yaml
+  # Point the host DNS to coredns to make life even worse
+  - transfer: 
+      source: resolver.crontab
+      dest: /etc/cron.d/resolver
+      target: control-plane
+
+  ############################################################################
+  # Part 3: etcd sleepytime: pause/resume etcd in a loop via namespace sharing
+  ############################################################################
+  - local: kubectl apply -f etcd-sleepytime-pod.yaml
+
+  ##########################
+  # Part 4: inode exhaustion
+  ##########################
+  - control-plane: "while true; do mktemp; done"
+    background: true
